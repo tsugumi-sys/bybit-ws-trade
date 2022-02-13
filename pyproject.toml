@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "bybit_websocket"
+version = "0.1.0"
+description = ""
+authors = ["tsugumi-sys <tidemark0105@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+asyncio = "^3.4.3"
+websockets = "^10.1"
+python-dotenv = "^0.19.2"
+pydantic = "^1.9.0"
+SQLAlchemy = "^1.4.31"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
