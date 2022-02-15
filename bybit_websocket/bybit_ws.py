@@ -1,9 +1,7 @@
 import hmac
-import json
 import time
-from typing import Tuple
-import websockets
-import asyncio
+import json
+from typing import Tuple, Union, List
 
 
 class BybitWebSocket:
@@ -37,5 +35,23 @@ class BybitWebSocket:
     def _ping(self) -> str:
         return '{"op": "ping"}'
 
-    def _orderbookL2_25(self) -> str:
-        return '{"op": "subscribe", "args": ["orderBookL2_25.BTCUSDT"]}'
+    def subscribe_topic(self, topics: Union[str, List[str]]) -> str:
+        if isinstance(topics, str):
+            topics = [topics]
+
+        return json.dumps({"op": "subscribe", "args": topics})
+
+    def unsubscribe_topic(self, topics: Union[str, List[str]]) -> str:
+        if isinstance(topics, str):
+            topics = [topics]
+
+        return json.dumps({"op": "unsubscribe", "args": topics})
+
+    def _orderbookL2_25(self, symbol: str) -> str:
+        return f"orderBookL2_25.{symbol}"
+
+    def _klines(self, symbol: str, interval: Union[str, int]) -> str:
+        return f"candle.{interval}.{symbol}"
+
+    def _ticks(self, symbol: str) -> str:
+        return f"trade.{symbol}"

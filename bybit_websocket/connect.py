@@ -1,5 +1,4 @@
-import traceback
-from typing import List
+from typing import List, Union
 import websockets
 import asyncio
 import os
@@ -11,12 +10,10 @@ from dotenv import load_dotenv
 from bybit_ws import BybitWebSocket
 from db import crud, models
 from db.database import SessionLocal, engine
+from utils.cusmom_exceptions import ConnectionFailedError
 
 # Load .env file
 load_dotenv()
-
-# Initialize sqlite3 in-memory database
-models.Base.metadata.create_all(engine)
 
 
 def get_db():
@@ -32,22 +29,28 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
+logger = logging.getLogger(__name__)
+
 
 bybit_ws = BybitWebSocket(api_key=os.environ["BYBIT_API_KEY"], api_secret=os.environ["BYBIT_SECRET_KEY"])
 
 
-async def connect_public_ws(ws_url :str):
-    print("public start")
-    async with websockets.connect(ws_url) as ws:
+async def orderbook_ws(ws_url :str, symbol: str):
+    async with websockets.connect(ws_url, logger=logger, ping_timeout=1.0) as ws:
+        # Subscribe board topic
+        board_topic = bybit_ws._orderbookL2_25(symbol)
+        subscribe_message = bybit_ws.subscribe_topic(board_topic)
+        await asyncio.wait_for(ws.send(subscribe_message), timeout=1.0)
+
         while True:
             try:
-                start = time.time()
-                # Load board
-                await ws.send(bybit_ws._orderbookL2_25())
+                # Get data
                 res = await ws.recv()
                 res = json.loads(res)
                 if "type" in list(res.keys()):
                     with SessionLocal() as db:
+                        # ws.logger.info(res)
+
                         if res["type"] == "snapshot":
                             crud.insert_board_items(db=db, insert_items=res["data"]["order_book"])
                         elif res["type"] == "delta":
@@ -63,52 +66,147 @@ async def connect_public_ws(ws_url :str):
                             if len(insert_items) > 0:
                                 crud.insert_board_items(db=db, insert_items=insert_items)
                         else:
-                            ws.logger.error(res)
+                            ws.logger.info("!!! 71")
+                            await asyncio.sleep(0.0)
+                            raise ConnectionFailedError
+                elif "success" in list(res.keys()):
+                    # Subscribe responce is randomly comming from bybit
+                    ws.logger.info("success subscribe!!")
+                    continue
                 else:
-                    ws.logger.error(res)
+                    ws.logger.error("responce dont have any key of [`success`, `type`]")
+                    print(res)
+                    await asyncio.sleep(5)
+                    raise ConnectionFailedError
                 
-                print(f"Execution time {time.time() - start}s")
                 bybit_ws.is_db_refreshed = True
-                await asyncio.sleep(3 - (time.time() - start))
+                await asyncio.sleep(0.0)
+            
             except websockets.exceptions.ConnectionClosed:
-                ws.logger.error("Public connection has closed. Try to connect again ...")
-                # Delete all items in Board
-                with SessionLocal() as db:
-                    _ = crud.delete_all_board_items(db=db)
+                ws.logger.error("Public websocket connection has been closed.")
+                await asyncio.sleep(0.0)
+                raise ConnectionFailedError
 
-                raise ValueError("Poop")
+            except asyncio.TimeoutError:
+                ws.logger.error("Time out for sending to pubic websocket api.")
+                await asyncio.sleep(0.0)
+                raise ConnectionFailedError
 
 
-async def connect_private_ws(ws_url: str):
-    async with websockets.connect(ws_url) as ws:
+async def ticks_ws(ws_url :str, symbol: str):
+    async with websockets.connect(ws_url, logger=logger, ping_timeout=1.0) as ws:
+        # Subscribe board topic
+        ticks_topic = bybit_ws._ticks(symbol)
+        subscribe_message = bybit_ws.subscribe_topic(ticks_topic)
+        await asyncio.wait_for(ws.send(subscribe_message), timeout=1.0)
+
+        while True:
+            try:
+                # Get data
+                res = await ws.recv()
+                res = json.loads(res)
+                # if "type" in list(res.keys()):
+                #     with SessionLocal() as db:
+                #         # ws.logger.info(res)
+
+                #         if res["type"] == "snapshot":
+                #             crud.insert_board_items(db=db, insert_items=res["data"]["order_book"])
+                #         elif res["type"] == "delta":
+                #             delete_items: List = res["data"]["delete"]
+                #             if len(delete_items) > 0:
+                #                 crud.delete_board_items(db=db, delete_items=delete_items)
+                            
+                #             update_items: List = res["data"]["update"]
+                #             if len(update_items) > 0:
+                #                 crud.update_board_items(db=db, update_items=update_items)
+                            
+                #             insert_items: List = res["data"]["insert"]
+                #             if len(insert_items) > 0:
+                #                 crud.insert_board_items(db=db, insert_items=insert_items)
+                #         else:
+                #             ws.logger.info("!!! 71")
+                #             await asyncio.sleep(0.0)
+                #             raise ConnectionFailedError
+                # elif "success" in list(res.keys()):
+                #     # Subscribe responce is randomly comming from bybit
+                #     ws.logger.info("success subscribe!!")
+                #     continue
+                # else:
+                #     ws.logger.error("responce dont have any key of [`success`, `type`]")
+                #     print(res)
+                #     await asyncio.sleep(5)
+                #     raise ConnectionFailedError
+                
+                # bybit_ws.is_db_refreshed = True
+
+                print(res)
+                await asyncio.sleep(3.0)
+            
+            except websockets.exceptions.ConnectionClosed:
+                ws.logger.error("Public websocket connection has been closed.")
+                await asyncio.sleep(0.0)
+                raise ConnectionFailedError
+
+            except asyncio.TimeoutError:
+                ws.logger.error("Time out for sending to pubic websocket api.")
+                await asyncio.sleep(0.0)
+                raise ConnectionFailedError
+
+
+async def trading_ws(ws_url: str):
+    async with websockets.connect(ws_url, logger=logger, ping_timeout=1.0) as ws:
         while True:
             try:
                 if bybit_ws.is_db_refreshed:
-                    print("Lets Trade!!")
+                    bybit_ws.is_db_refreshed = False
 
                     start = time.time()
                     with SessionLocal() as db:
                         buy_borad = crud.get_board(db=db, symbol="BTCUSDT", side="Buy")
                         sell_board = crud.get_board(db, symbol="BTCUSDT", side="Sell")
                         best_bid, best_ask = buy_borad[-1], sell_board[0]
-                        print(best_bid, best_ask)
+                        
+                        ws.logger.info(f"Best Ask (price, size): ({best_ask.price}, {best_ask.size})")
+                        ws.logger.info(f"Best Bid (price, size): ({best_bid.price}, {best_bid.size})")
 
-                    bybit_ws.is_db_refreshed = False
-                    print(f"Trade execution time: {time.time() - start}s")
+
+                    ws.logger.info(f"Trade execution time: {time.time() - start}s")
                 
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(3)
             except websockets.exceptions.ConnectionClosed:
-                ws.logger.error("Private connection has closed. Try to connect again ...")
-                raise ValueError("Unko")
+                ws.logger.error("Private websocket connection has been Closed.")
+                await asyncio.sleep(0.0)
+                raise ConnectionFailedError
 
 
-async def main():
+async def run_both_websockets():
+    symbol = "BTCUSDT"
     await asyncio.gather(
-        connect_private_ws(bybit_ws._ws_private_url()),
-        connect_public_ws(bybit_ws._ws_public_url()),
+        ticks_ws(ws_url=bybit_ws._ws_public_url(), symbol=symbol),
     )
 
 
+def main():
+    try:
+        # Initialize sqlite3 in-memory database
+        models.Base.metadata.create_all(engine)
+        asyncio.run(run_both_websockets())
+    except ConnectionFailedError:
+        bybit_ws.is_db_refreshed = False
+        # Clear in-memory DB
+        models.Base.metadata.drop_all(engine)
+
+        # Initialize sqlite3 in-memory DB
+        models.Base.metadata.create_all(engine)
+        
+        logger.info("Reconnect websockets")
+        asyncio.run(main())
+
+    # Clear in-memory DB again for next try
+    models.Base.metadata.drop_all(engine)
+    bybit_ws.is_db_refreshed = False
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    while True:
+        main()
     
