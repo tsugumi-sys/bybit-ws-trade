@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, DateTime, Float, String
+from sqlalchemy import Column, Integer, Float, String
 
 from db.database import Base
 
@@ -22,16 +22,17 @@ class Tick(Base):
     id = Column(String(100), primary_key=True)
     symbol = Column(String(10), index=True)
     price = Column(Float)
-    timestamp = Column(String(30), index=True)
+    timestamp = Column(Integer, index=True)
     size = Column(Float)
 
 
 class OHLCV(Base):
     __tablename__ = "ohlcv"
 
-    timestamp = Column(String(30), primary_key=True, index=True)
+    timestamp = Column(Integer, primary_key=True, index=True)
     symbol = Column(String(10), index=True)
     open = Column(Float)
     high = Column(Float)
     low = Column(Float)
     close = Column(Float)
+    volume = Column(Float)

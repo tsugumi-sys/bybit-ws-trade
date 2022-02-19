@@ -5,3 +5,7 @@ run_websocket:
 .PHONY: run_bybit_ws
 run_bybit_ws:
 	poetry run python ./bybit_websocket/connect.py
+
+.PHONY: visualize
+visualize:
+	poetry run python ./visualize/candle.py

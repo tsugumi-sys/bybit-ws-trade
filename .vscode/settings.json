@@ -1,0 +1,17 @@
+{
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.linting.enabled": true,
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": [
+        "--line-length",
+        "160"
+    ],
+    "python.linting.flake8Args": [
+        "--max-line-length",
+        "160",
+        "--ignore",
+        "E402"
+    ],
+    "editor.formatOnSave": true
+}

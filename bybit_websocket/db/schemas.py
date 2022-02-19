@@ -2,6 +2,7 @@ from pydantic import BaseModel
 
 sides = ["Buy", "Sell"]
 
+# timestamps are unix timestamp (ms).
 
 class BoardBase(BaseModel):
     id: str
@@ -22,9 +23,9 @@ class Board(BoardBase):
 
 class TickBase(BaseModel):
     id: str
+    timestamp: int
     symbol: str
     price: float
-    timestamp: str
     size: float
 
 
@@ -34,20 +35,27 @@ class TickCreate(TickBase):
 
 class Tick(TickBase):
     pass
+    class Config:
+            orm_mode = True
 
 
 class OHLCVBase(BaseModel):
-    timestamp: str
+    timestamp: int
     symbol: str
     open: float
     high: float
     low: float
     close: float
+    volume: float
 
 
 class OHLCVCreate(OHLCVBase):
     pass
+    class Config:
+        orm_mode = True
 
 
 class OHLCV(OHLCVBase):
     pass
+    class Config:
+        orm_mode = True
